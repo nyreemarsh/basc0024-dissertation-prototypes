@@ -3,29 +3,44 @@ import { Shell } from "./components/shared/Shell";
 import { Header } from "./components/shared/Header";
 import { SummaryCard } from "./components/shared/SummaryCard";
 import { TemporalNav } from "./components/shared/TemporalNav";
+import { useScenario } from "../context/ScenarioContext";
+
+/** Parses the hour component from a 'HH:MM' string. */
+function toHour(hhmm: string): number {
+  return parseInt(hhmm.split(':')[0], 10);
+}
+
+/** Formats a pence integer as a £-prefixed display string. e.g. 185 → '£1.85'. */
+function formatPounds(pence: number): string {
+  return `£${(pence / 100).toFixed(2)}`;
+}
 
 /**
  * Prototype A — Baseline / Minimally Explainable (DR7)
  *
  * Baseline prototype. Identical to shared visual foundation with no additions.
- * The AI's charging decision at 14:00 is visible as a labelled marker on the
- * timeline. The battery SOC% trajectory shows the consequence of that decision.
+ * The AI's charging decision is visible as a labelled marker on the timeline.
+ * The battery SOC% trajectory shows the consequence of that decision.
  *
  * Deliberately withholds:
  * - No causal factors named
- * - No explanation of why 14:00 was chosen
+ * - No explanation of why the charge time was chosen
  * - No solar forecast, grid pricing, or battery headroom surfaced
  * - No uncertainty or counterfactual information
  *
  * Forecast encoding: solid fill at 40% opacity (variant="solid")
  */
 export function PrototypeA() {
+  const scenario = useScenario();
+
   // Time-aware charging state (same logic as CHARGED pill)
   const now = new Date();
   const currentHour = now.getHours();
   const currentMinutes = now.getMinutes();
-  const chargeStart = 14;
-  const chargeEnd = 16;
+
+  // Derive charge window bounds from scenario data
+  const chargeStart = toHour(scenario.chargeWindowStart);
+  const chargeEnd = toHour(scenario.chargeWindowEnd);
 
   const todayISO = now.toISOString().split("T")[0];
 
@@ -46,14 +61,17 @@ export function PrototypeA() {
   const isDuringCharge = currentHour >= chargeStart && currentHour < chargeEnd;
   const isAfterCharge = currentHour >= chargeEnd;
 
-  // Calculate battery SOC based on CURRENT real time (not selected day)
-  // This value stays constant regardless of which day the user is viewing
-  let batterySOC = 37; // default baseline (pre-charge level)
+  // Calculate battery SOC based on CURRENT real time (not selected day).
+  // Uses scenario.batterySOCPct as the pre-charge baseline, interpolating
+  // linearly to 100% over the charge window.
+  let batterySOC = scenario.batterySOCPct;
   if (isDuringCharge) {
-    // Interpolate based on current real time progress through charge window
     const minutesSinceChargeStart = (currentHour - chargeStart) * 60 + currentMinutes;
     const totalChargeMinutes = (chargeEnd - chargeStart) * 60;
-    batterySOC = Math.round(37 + ((100 - 37) * minutesSinceChargeStart / totalChargeMinutes));
+    batterySOC = Math.round(
+      scenario.batterySOCPct +
+        ((100 - scenario.batterySOCPct) * minutesSinceChargeStart) / totalChargeMinutes
+    );
   } else if (isAfterCharge) {
     batterySOC = 100;
   }
@@ -67,23 +85,27 @@ export function PrototypeA() {
   // Determine notification text for SummaryCard based on selected day
   let notificationText = "";
   if (selectedDayInfo.isToday && isBeforeCharge) {
-    notificationText = "Your battery is scheduled to charge today at 14:00. Charging will complete by 16:00.";
+    notificationText = `Your battery is scheduled to charge today at ${scenario.chargeWindowStart}. Charging will complete by ${scenario.chargeWindowEnd}.`;
   } else if (selectedDayInfo.isToday && isDuringCharge) {
-    notificationText = "Your battery is charging now. Started at 14:00, scheduled to complete by 16:00.";
+    notificationText = `Your battery is charging now. Started at ${scenario.chargeWindowStart}, scheduled to complete by ${scenario.chargeWindowEnd}.`;
   } else if (selectedDayInfo.isToday && isAfterCharge) {
-    notificationText = "Your battery finished charging today at 16:00. Battery is now at 100%.";
+    notificationText = `Your battery finished charging today at ${scenario.chargeWindowEnd}. Battery is now at 100%.`;
   } else if (selectedDayInfo.isPast) {
-    notificationText = "Battery charged at 14:00. Charging completed at 16:00.";
+    notificationText = `Battery charged at ${scenario.chargeWindowStart}. Charging completed at ${scenario.chargeWindowEnd}.`;
   } else if (selectedDayInfo.isFuture) {
-    notificationText = "Battery is scheduled to charge at 14:00. Charging will complete by 16:00.";
+    notificationText = `Battery is scheduled to charge at ${scenario.chargeWindowStart}. Charging will complete by ${scenario.chargeWindowEnd}.`;
   }
 
   // Calculate cost text based on selected day
+  const costToday = formatPounds(scenario.costTodayPence);
+  const savingsToday = formatPounds(scenario.savingsPence);
+  const co2Today = `${scenario.co2AvoidedKg} kg`;
+
   let costText = "";
   if (selectedDayInfo.isToday) {
-    costText = "Estimated cost today: £3.40 · Estimated savings: £1.20 · CO₂ avoided: 2.1 kg";
+    costText = `Estimated cost today: ${costToday} · Estimated savings: ${savingsToday} · CO₂ avoided: ${co2Today}`;
   } else if (selectedDayInfo.isPast) {
-    // Mock different values for different past days
+    // Past-day values are illustrative UI scaffolding — not scenario-specific data
     const dayOfWeek = new Date(selectedDayInfo.date).getDay();
     const pastCosts = [
       { cost: "£2.80", savings: "£0.90", co2: "1.8 kg" }, // Sunday
@@ -97,6 +119,7 @@ export function PrototypeA() {
     const { cost, savings, co2 } = pastCosts[dayOfWeek];
     costText = `Total cost: ${cost} · Savings: ${savings} · CO₂ avoided: ${co2}`;
   } else if (selectedDayInfo.isFuture) {
+    // Future forecast values are illustrative UI scaffolding — not scenario-specific data
     costText = "Forecast cost: £3.15 · Forecast savings: £1.10 · Forecast CO₂ avoided: 2.3 kg";
   }
 
