@@ -103,6 +103,15 @@ export interface UserOverride {
   costWithoutOverridePence: number;       // what it would have cost without the override
 }
 
+/**
+ * Breakdown of how today's savings were achieved.
+ * solarPence + offPeakPence must equal the parent Scenario's savingsPence.
+ */
+export interface SavingsBreakdown {
+  solarPence: number;    // savings attributable to solar generation capture
+  offPeakPence: number;  // savings attributable to off-peak grid pricing
+}
+
 // ── Main Scenario interface ──────────────────────────────────────────────────
 
 export interface Scenario {
@@ -136,6 +145,7 @@ export interface Scenario {
   // Outputs (monetary values in pence; display formatting belongs in components)
   costTodayPence: number;
   savingsPence: number;
+  savingsBreakdown: SavingsBreakdown;
   co2AvoidedKg: number;
 
   // Causal factors

@@ -55,6 +55,7 @@ export const scenario3: Scenario = {
 
   costTodayPence: 275,
   savingsPence: 170,
+  savingsBreakdown: { solarPence: 20, offPeakPence: 150 },  // 20 + 150 = 170 ✓
   co2AvoidedKg: 1.4,
 
   causalFactors: {

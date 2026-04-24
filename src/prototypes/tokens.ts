@@ -24,11 +24,12 @@ export const colors = {
     },
     // Brand / Data Series
     brand: {
-      solar: "#4DB6A4",          // teal-green for solar generation
-      consumption: "#E57373",     // coral-red for consumption
-      battery: "#5B9BD5",         // steel blue for battery SOC
-      gridImport: "#9B8EC4",      // muted violet for grid import
-      gridExport: "#5CB85C",      // green for grid export
+      solar: "#4DB6A4",              // teal-green for solar generation
+      consumption: "#E57373",         // coral-red for consumption
+      battery: "#5B9BD5",             // steel blue for battery SOC
+      gridImport: "#9B8EC4",          // muted violet for grid import
+      gridExport: "#5CB85C",          // green for grid export
+      carbonIntensity: "#64748B",     // slate-grey for carbon intensity factor (Prototype B+)
     },
     // AI-specific (DR11 safeguard: do not reuse these hues elsewhere)
     ai: {
