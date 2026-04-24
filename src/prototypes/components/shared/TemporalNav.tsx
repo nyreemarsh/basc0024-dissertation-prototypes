@@ -1,13 +1,28 @@
 import { useState, useRef, useEffect, type ReactElement } from "react";
 import { colors, fonts, space, radius } from "../../tokens";
-import { Sun, Moon } from "lucide-react";
-import type { TariffBand } from "../../../scenarios/types";
+import { Sun, Moon, WashingMachine } from "lucide-react";
+import type { TariffBand, UserOverride } from "../../../scenarios/types";
 
 /**
  * Returns the tariff rate and colour tier for a given hour (0–23) by
  * scanning the scenario's tariffSchedule. 'to: 00:00' is treated as
  * end-of-day (hour 24). Falls back to 17p / mid if no band matches.
  */
+/** Converts 'HH:MM' to total minutes since midnight. */
+function hhmToMin(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** Returns true if hour h (whole-hour slot [h:00, h+1:00)) overlaps the window [startHHMM, endHHMM). */
+function hourOverlapsWindow(h: number, startHHMM: string, endHHMM: string): boolean {
+  const startMin = hhmToMin(startHHMM);
+  const endMin   = hhmToMin(endHHMM);
+  const hStart   = h * 60;
+  const hEnd     = hStart + 60;
+  return startMin < hEnd && endMin > hStart;
+}
+
 function findTariffForHour(
   h: number,
   schedule: TariffBand[]
@@ -48,6 +63,9 @@ interface TemporalNavProps {
    *  computeHourlyGridFlow(). Positive = import, negative = export.
    *  Other days continue to use the illustrative mock grid flow. */
   hourlyGridFlow?: number[];
+  /** Optional user-scheduled appliance override (Scenario 3 only). When present,
+   *  cancelled and rescheduled appliance windows are shown above the Energy/Grid charts. */
+  userOverride?: UserOverride;
 }
 
 interface HourData {
@@ -86,7 +104,7 @@ interface DayData {
  * - "solid" (A/B): retrospective = full opacity, forecast = 40% opacity
  * - "hatched" (C/D): retrospective = full opacity, forecast = diagonal hatch with confidence-based opacity/density
  */
-export function TemporalNav({ variant, onDayChange, showCausalContext = false, weatherDescription, hourlySOC, tariffSchedule, hourlyCarbon, hourlySolar, hourlyConsumption, hourlyGridFlow }: TemporalNavProps) {
+export function TemporalNav({ variant, onDayChange, showCausalContext = false, weatherDescription, hourlySOC, tariffSchedule, hourlyCarbon, hourlySolar, hourlyConsumption, hourlyGridFlow, userOverride }: TemporalNavProps) {
   // Layout constants for column-based positioning
   const COLUMN_GAP = 8; // gap between columns in px (corresponds to space[2])
   
@@ -99,6 +117,8 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
   
   // Tooltip state
   const [tooltipHour, setTooltipHour] = useState<number | null>(null);
+  const [hoveredApplianceHour, setHoveredApplianceHour] = useState<number | null>(null);
+  const applianceTooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Calculate responsive column width on mount and resize
   useEffect(() => {
@@ -357,6 +377,11 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
   // Zero line sits at 6/9 of the way down (import zone = 160 px, export zone = 80 px)
   const gridZeroY = barContainerHeight * GRID_MAX_IMPORT / (GRID_MAX_IMPORT + GRID_MAX_EXPORT);
 
+  // Appliance override icons: today only, Energy and Grid tabs only, when override data is present
+  const showApplianceIcons = !!(userOverride && isTodaySelected && activeTab !== "battery");
+  // Row height (20 px) + bottom margin (4 px) — matches the hour-label row cadence
+  const iconRowOffset = showApplianceIcons ? 24 : 0;
+
   // AI charging window
   const chargeStartHour = 14;
   const chargeEndHour = 16;
@@ -497,7 +522,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
               position: "relative",
               height: barContainerHeight,
               flexShrink: 0,
-              marginTop: selectedDayIndex === todayIndex ? (14 + 2 + 18 + 4 + 20 + 4) : (20 + 4), // Align with plot area (Row 4)
+              marginTop: selectedDayIndex === todayIndex ? (14 + 2 + 20 + 4 + iconRowOffset) : (20 + 4 + iconRowOffset), // Align with plot area (Row 4)
             }}
           >
             {activeTab === "energy" && (
@@ -581,75 +606,6 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
               })}
             </div>
 
-            {/* Row 2: CHARGING/CHARGED pill row */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
-                gap: COLUMN_GAP,
-                width: "100%",
-                minWidth: 0,
-                height: selectedDayIndex === todayIndex ? 18 : 0,
-                marginBottom: selectedDayIndex === todayIndex ? 4 : 0,
-                position: "relative",
-                zIndex: 10,
-              }}
-            >
-              {selectedDayIndex === todayIndex && selectedDay.hours.map((_, h) => {
-                const isChargeStartHour = h === chargeStartHour;
-                const showChargingPill = currentHour >= chargeStartHour && currentHour < chargeEndHour;
-                const showChargedPill = currentHour >= chargeEndHour;
-
-                return (
-                  <div
-                    key={`charging-pill-${h}`}
-                    style={{
-                      minWidth: 0,
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      position: "relative",
-                    }}
-                  >
-                    {isChargeStartHour && showChargingPill && (
-                      <div
-                        style={{
-                          fontFamily: fonts.family.sans,
-                          fontSize: 9,
-                          fontWeight: fonts.weight.bold,
-                          color: colors.ai.decision,
-                          backgroundColor: colors.bg.surface,
-                          padding: "2px 6px",
-                          borderRadius: radius.sm,
-                          border: `1px solid ${colors.ai.decision}`,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        CHARGING
-                      </div>
-                    )}
-                    {isChargeStartHour && showChargedPill && (
-                      <div
-                        style={{
-                          fontFamily: fonts.family.sans,
-                          fontSize: 9,
-                          fontWeight: fonts.weight.bold,
-                          color: "#2FA75A",
-                          backgroundColor: colors.bg.surface,
-                          padding: "2px 6px",
-                          borderRadius: radius.sm,
-                          border: "1px solid #2FA75A",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        CHARGED
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
             {/* Row 3: Hour labels row */}
             <div
               style={{
@@ -686,6 +642,112 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
                 );
               })}
             </div>
+
+            {/* Row 3.5: Appliance override icon row (Energy + Grid tabs, Scenario 3 only) */}
+            {showApplianceIcons && userOverride && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
+                  gap: COLUMN_GAP,
+                  width: "100%",
+                  minWidth: 0,
+                  height: 20,
+                  marginBottom: 4,
+                  position: "relative",
+                  zIndex: 10,
+                }}
+              >
+                {selectedDay.hours.map((_, h) => {
+                  const isCancelled = hourOverlapsWindow(h, userOverride.originalWindowStart, userOverride.originalWindowEnd);
+                  const isRescheduled = hourOverlapsWindow(h, userOverride.overrideTargetStart, userOverride.overrideTargetEnd);
+
+                  if (!isCancelled && !isRescheduled) {
+                    return <div key={`appliance-${h}`} />;
+                  }
+
+                  const applianceTooltipText = isCancelled
+                    ? `Originally scheduled: ${userOverride.originalScheduleDescription}. Rescheduled due to price surge.`
+                    : `Rescheduled: ${userOverride.originalScheduleDescription} running here.`;
+
+                  const isTooltipVisible = hoveredApplianceHour === h;
+
+                  return (
+                    <div
+                      key={`appliance-${h}`}
+                      onMouseEnter={() => {
+                        if (applianceTooltipTimer.current) clearTimeout(applianceTooltipTimer.current);
+                        applianceTooltipTimer.current = setTimeout(() => setHoveredApplianceHour(h), 150);
+                      }}
+                      onMouseLeave={() => {
+                        if (applianceTooltipTimer.current) clearTimeout(applianceTooltipTimer.current);
+                        setHoveredApplianceHour(null);
+                      }}
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        cursor: "default",
+                        position: "relative",
+                      }}
+                    >
+                      {/* Icon with optional X overlay */}
+                      <div style={{ position: "relative", display: "inline-flex" }}>
+                        <WashingMachine
+                          size={14}
+                          color={isCancelled ? "#D1D5DB" : "#F59E0B"}
+                          strokeWidth={1.5}
+                        />
+                        {isCancelled && (
+                          <svg
+                            width={14}
+                            height={14}
+                            style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+                          >
+                            <line x1="3" y1="3" x2="11" y2="11" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" />
+                            <line x1="11" y1="3" x2="3" y2="11" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Custom hover tooltip — appears above the icon */}
+                      {isTooltipVisible && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: "calc(100% + 6px)",
+                            left: "50%",
+                            transform: "translateX(-50%)",
+                            zIndex: 30,
+                            pointerEvents: "none",
+                            width: "max-content",
+                            maxWidth: 220,
+                          }}
+                        >
+                          <div
+                            style={{
+                              backgroundColor: "#FFFFFF",
+                              border: "1px solid #E5E7EB",
+                              borderRadius: 8,
+                              padding: "8px 12px",
+                              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+                              fontFamily: fonts.family.sans,
+                              fontSize: 11,
+                              color: "#374151",
+                              lineHeight: 1.4,
+                              whiteSpace: "normal",
+                              textAlign: "center",
+                            }}
+                          >
+                            {applianceTooltipText}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Row 4: Plot area row */}
             <div
@@ -761,25 +823,6 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
                 );
               })()}
 
-              {/* AI CHARGE shaded region */}
-              {selectedDayIndex === todayIndex && (() => {
-                const startLeftPx = chargeStartHour * (columnWidth + COLUMN_GAP);
-                const endLeftPx = chargeEndHour * (columnWidth + COLUMN_GAP);
-                return (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: startLeftPx,
-                      width: endLeftPx - startLeftPx,
-                      top: 0,
-                      height: barContainerHeight,
-                      backgroundColor: "rgba(232, 151, 26, 0.08)",
-                      pointerEvents: "none",
-                      zIndex: 1,
-                    }}
-                  />
-                );
-              })()}
 
               {selectedDay.hours.map((hourData, h) => {
                 const isNow =
@@ -1903,6 +1946,26 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
                   <span style={{ color: colors.text.secondary }}>
                     Grid flow
                   </span>
+                </div>
+              </>
+            )}
+
+            {/* Appliance override legend — only for S3 today on Energy/Grid tabs */}
+            {showApplianceIcons && userOverride && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: space[2] }}>
+                  <div style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+                    <WashingMachine size={12} color="#D1D5DB" strokeWidth={1.5} />
+                    <svg width={12} height={12} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}>
+                      <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" />
+                      <line x1="9.5" y1="2.5" x2="2.5" y2="9.5" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <span style={{ color: colors.text.secondary }}>Appliance run cancelled</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: space[2] }}>
+                  <WashingMachine size={12} color="#F59E0B" strokeWidth={1.5} />
+                  <span style={{ color: colors.text.secondary }}>Appliance run active</span>
                 </div>
               </>
             )}

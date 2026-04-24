@@ -336,7 +336,7 @@ export function PrototypeC() {
         expandableExplanation={explanationContent}
       />
 
-      <TemporalNav variant="hatched" showCausalContext={true} onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} />
+      <TemporalNav variant="hatched" showCausalContext={true} onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} userOverride={scenario.userOverride} />
     </Shell>
   );
 }
