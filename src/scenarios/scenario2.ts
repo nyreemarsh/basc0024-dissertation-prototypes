@@ -66,6 +66,20 @@ export const scenario2: Scenario = {
   forecastAccuracyPct: 91,
   forecastVariancePct: 5,
 
+  // 00–07: overnight base-load drain 20%→18%, then early solar rise to 25% by 08:00
+  // 08–10: holds at 25% (AI holds off charging for carbon reasons)
+  // 11–13: charge 25%→100% over 3 hours; 14–23: household discharge 100%→75%
+  hourlySOC: [20, 19, 18, 18, 18, 19, 20, 22, 25, 25, 25, 50, 75, 100, 97, 94, 92, 89, 86, 84, 81, 78, 76, 75],
+
+  // Wind drops overnight → elevated carbon through morning; drops sharply at 11:00 as wind recovers + solar peaks; recovers gradually evening
+  hourlyCarbon: [220, 225, 230, 240, 250, 260, 270, 280, 290, 285, 260, 145, 120, 100, 95, 110, 130, 160, 185, 200, 210, 215, 220, 215],
+
+  // Sunny morning: solar peaks 11:00–13:00 at 3.5 kWh
+  hourlySolar: [0, 0, 0, 0, 0, 0, 0.4, 1.0, 1.8, 2.4, 3.2, 3.5, 3.5, 3.3, 2.9, 2.2, 1.4, 0.6, 0.2, 0, 0, 0, 0, 0],
+
+  // Standard UK household profile (same as S1)
+  hourlyConsumption: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.8, 1.5, 1.8, 0.9, 0.8, 0.9, 1.1, 1.2, 1.0, 0.9, 1.0, 1.2, 1.8, 2.5, 2.8, 2.5, 2.0, 1.2],
+
   counterfactual: {
     alternativeChargeTime: '08:00',
     alternativeRatePence: 14,

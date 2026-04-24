@@ -68,6 +68,24 @@ export const scenario3: Scenario = {
 
   forecastAccuracyPct: 62,
 
+  // 00–07: starts at 30%, overnight drain to 25%
+  // 08–13: cloudy solar recovery 26%→40%; 14: holds at 40% (reference time)
+  // 15–17: light discharge during demand surge 40%→34%
+  // 18: holds at 34% pre-charge; 18:30–20:30 AI charge (+half-hr boundary modelled per-hour):
+  //   h=18 end (0.5hr charged): 55%; h=19 end (1.5hr charged): 85%; h=20 end (2hr): 100%
+  // 21–23: post-charge household discharge 100%→85%
+  hourlySOC: [30, 28, 26, 25, 25, 26, 28, 30, 32, 34, 36, 38, 39, 40, 40, 38, 36, 34, 55, 85, 100, 97, 93, 85],
+
+  // Cloudy day: moderate carbon throughout; elevated during 15:00–17:00 demand surge; cleaner post-18:30 as demand drops
+  hourlyCarbon: [190, 185, 180, 175, 170, 175, 180, 185, 195, 210, 220, 225, 230, 240, 245, 245, 250, 245, 220, 180, 165, 160, 155, 150],
+
+  // Cloudy afternoon: low solar ceiling at 0.8 kWh, peaks 13:00–14:00
+  hourlySolar: [0, 0, 0, 0, 0, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.8, 0.7, 0.5, 0.3, 0.1, 0, 0, 0, 0, 0],
+
+  // Appliances rescheduled to 18:30–20:30 → consumption spike at 19:00–20:00
+  // 19:00 = base 2.5 + appliances 1.8 = 4.3; 20:00 = base 2.5 + appliances 1.5 = 4.0
+  hourlyConsumption: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.8, 1.5, 1.8, 0.9, 0.8, 0.9, 1.1, 1.2, 1.0, 0.9, 1.0, 1.2, 2.5, 4.3, 4.0, 2.0, 1.2, 0.6],
+
   counterfactual: {
     alternativeChargeTime: '16:00',
     costDeltaPence: 170,

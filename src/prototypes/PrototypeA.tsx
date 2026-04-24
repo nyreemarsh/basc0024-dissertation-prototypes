@@ -4,6 +4,7 @@ import { Header } from "./components/shared/Header";
 import { SummaryCard } from "./components/shared/SummaryCard";
 import { TemporalNav } from "./components/shared/TemporalNav";
 import { useScenario } from "../context/ScenarioContext";
+import { computeHourlyGridFlow } from "../scenarios/derivations";
 
 /** Parses the hour component from a 'HH:MM' string. */
 function toHour(hhmm: string): number {
@@ -32,6 +33,7 @@ function formatPounds(pence: number): string {
  */
 export function PrototypeA() {
   const scenario = useScenario();
+  const hourlyGridFlow = computeHourlyGridFlow(scenario);
 
   // Time-aware charging state (same logic as CHARGED pill)
   const now = new Date();
@@ -136,7 +138,7 @@ export function PrototypeA() {
         showModifyButton={showModifyButton}
       />
 
-      <TemporalNav variant="solid" onDayChange={setSelectedDayInfo} />
+      <TemporalNav variant="solid" onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} />
     </Shell>
   );
 }

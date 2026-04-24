@@ -155,6 +155,22 @@ export interface Scenario {
   forecastAccuracyPct: number;          // e.g. 87
   forecastVariancePct?: number;         // ± figure, e.g. 8; omit if not specified
 
+  /** 24-element battery SOC trajectory (0–100%), one integer per hour 00:00–23:00.
+   *  Drives the Battery tab area chart in TemporalNav for today's date. */
+  hourlySOC: number[];
+
+  /** 24-element carbon intensity values (gCO₂/kWh), one per hour 00:00–23:00.
+   *  Drives the CO₂ strip in TemporalNav for today's date. */
+  hourlyCarbon: number[];
+
+  /** 24-element solar generation (kWh), one per hour 00:00–23:00.
+   *  Drives the orange solar bars in the Energy flow tab for today's date. */
+  hourlySolar: number[];
+
+  /** 24-element household consumption (kWh), one per hour 00:00–23:00.
+   *  Drives the purple consumption bars in the Energy flow tab for today's date. */
+  hourlyConsumption: number[];
+
   // Counterfactual — consumed by Prototype D
   counterfactual: Counterfactual;
 

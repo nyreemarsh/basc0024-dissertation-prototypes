@@ -60,6 +60,19 @@ export const scenario1: Scenario = {
   forecastAccuracyPct: 87,
   forecastVariancePct: 8,
 
+  // 00–07: flat at 15% (pre-charge); 08: mid-charge 58%; 09–10: 100%
+  // 10–23: gradual household discharge 100%→75%
+  hourlySOC: [15, 15, 15, 15, 15, 15, 15, 15, 58, 100, 100, 98, 96, 94, 92, 90, 88, 86, 84, 82, 80, 78, 76, 75],
+
+  // Clear spring day: high overnight carbon (gas baseload), drops sharply as solar ramps 09–14, recovers evening
+  hourlyCarbon: [210, 205, 200, 195, 190, 180, 170, 165, 160, 150, 120, 100, 95, 100, 110, 130, 150, 170, 180, 185, 185, 180, 175, 170],
+
+  // Clear spring day: solar peaks 11:00–13:00 at 3.0 kWh
+  hourlySolar: [0, 0, 0, 0, 0, 0, 0.3, 0.8, 1.4, 2.0, 2.8, 3.0, 3.0, 2.9, 2.6, 2.0, 1.2, 0.5, 0.1, 0, 0, 0, 0, 0],
+
+  // Standard UK household profile
+  hourlyConsumption: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.8, 1.5, 1.8, 0.9, 0.8, 0.9, 1.1, 1.2, 1.0, 0.9, 1.0, 1.2, 1.8, 2.5, 2.8, 2.5, 2.0, 1.2],
+
   counterfactual: {
     alternativeChargeTime: '18:30',
     alternativeRatePence: 28,

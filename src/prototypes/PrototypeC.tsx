@@ -6,6 +6,7 @@ import { TemporalNav } from "./components/shared/TemporalNav";
 import { colors, fonts } from "./tokens";
 import { useScenario } from "../context/ScenarioContext";
 import type { CausalFactors, FactorWeight, Scenario, TariffBand } from "../scenarios/types";
+import { computeHourlyGridFlow } from "../scenarios/derivations";
 
 /**
  * Prototype C — Comprehensible+ / Uncertainty-Integrated (DR9)
@@ -163,6 +164,7 @@ function buildFactorItems(scenario: Scenario): FactorItem[] {
 
 export function PrototypeC() {
   const scenario = useScenario();
+  const hourlyGridFlow = computeHourlyGridFlow(scenario);
   const {
     chargeWindowStart, chargeWindowEnd,
     costTodayPence, savingsPence, savingsBreakdown, co2AvoidedKg,
@@ -334,7 +336,7 @@ export function PrototypeC() {
         expandableExplanation={explanationContent}
       />
 
-      <TemporalNav variant="hatched" showCausalContext={true} onDayChange={setSelectedDayInfo} />
+      <TemporalNav variant="hatched" showCausalContext={true} onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} />
     </Shell>
   );
 }

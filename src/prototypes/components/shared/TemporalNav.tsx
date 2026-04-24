@@ -1,11 +1,53 @@
 import { useState, useRef, useEffect } from "react";
 import { colors, fonts, space, radius } from "../../tokens";
 import { Sun, Moon } from "lucide-react";
+import type { TariffBand } from "../../../scenarios/types";
+
+/**
+ * Returns the tariff rate and colour tier for a given hour (0–23) by
+ * scanning the scenario's tariffSchedule. 'to: 00:00' is treated as
+ * end-of-day (hour 24). Falls back to 17p / mid if no band matches.
+ */
+function findTariffForHour(
+  h: number,
+  schedule: TariffBand[]
+): { ratePence: number; tier: "low" | "mid" | "high" } {
+  const band = schedule.find((b) => {
+    const fromH = parseInt(b.from.split(":")[0], 10);
+    const toH = b.to === "00:00" ? 24 : parseInt(b.to.split(":")[0], 10);
+    return h >= fromH && h < toH;
+  });
+  const ratePence = band?.ratePence ?? 17;
+  const tier: "low" | "mid" | "high" =
+    ratePence < 15 ? "low" : ratePence <= 25 ? "mid" : "high";
+  return { ratePence, tier };
+}
 
 interface TemporalNavProps {
   variant: "solid" | "hatched"; // solid for A/B, hatched for C/D
   onDayChange?: (dayInfo: { date: string; isToday: boolean; isPast: boolean; isFuture: boolean }) => void;
   showCausalContext?: boolean; // Show causal context lines in tooltips (for B, C, D)
+  /** scenario.weather string — overrides the current day's weather icon only. */
+  weatherDescription?: string;
+  /** scenario.hourlySOC — 24-element array that drives today's Battery tab chart.
+   *  Other days continue to use the illustrative mock trajectory. */
+  hourlySOC?: number[];
+  /** scenario.tariffSchedule — used to derive per-hour tariff values for today.
+   *  Other days continue to use the illustrative mock (off-peak/peak split). */
+  tariffSchedule?: TariffBand[];
+  /** scenario.hourlyCarbon — 24-element array (gCO₂/kWh) for today's CO₂ strip.
+   *  Other days continue to use the illustrative mock carbon values. */
+  hourlyCarbon?: number[];
+  /** scenario.hourlySolar — 24-element array (kWh) for today's Energy flow solar bars.
+   *  Other days continue to use the illustrative mock solar profile. */
+  hourlySolar?: number[];
+  /** scenario.hourlyConsumption — 24-element array (kWh) for today's Energy flow consumption bars.
+   *  Other days continue to use the illustrative mock consumption profile. */
+  hourlyConsumption?: number[];
+  /** Pre-computed 24-element net grid flow array (kWh) for today, derived via
+   *  computeHourlyGridFlow(). Positive = import, negative = export.
+   *  Other days continue to use the illustrative mock grid flow. */
+  hourlyGridFlow?: number[];
 }
 
 interface HourData {
@@ -44,7 +86,7 @@ interface DayData {
  * - "solid" (A/B): retrospective = full opacity, forecast = 40% opacity
  * - "hatched" (C/D): retrospective = full opacity, forecast = diagonal hatch with confidence-based opacity/density
  */
-export function TemporalNav({ variant, onDayChange, showCausalContext = false }: TemporalNavProps) {
+export function TemporalNav({ variant, onDayChange, showCausalContext = false, weatherDescription, hourlySOC, tariffSchedule, hourlyCarbon, hourlySolar, hourlyConsumption, hourlyGridFlow }: TemporalNavProps) {
   // Layout constants for column-based positioning
   const COLUMN_GAP = 8; // gap between columns in px (corresponds to space[2])
   
@@ -113,7 +155,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
   const mockSOCData = mockSOCDataBase;
 
   // Generate 7 days of data based on actual dates
-  const generateDayData = (date: Date): DayData => {
+  const generateDayData = (date: Date, socOverride?: number[], tariffOverride?: TariffBand[], solarOverride?: number[], consumptionOverride?: number[]): DayData => {
     const dateISO = date.toISOString().split('T')[0];
     const dayName = weekDays[date.getDay() === 0 ? 6 : date.getDay() - 1]; // Map Sunday (0) to index 6
     const dayNum = date.getDate();
@@ -143,36 +185,52 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
           isPast || (isToday && h <= currentHour);
         const isForecast = !isRetrospective;
 
-        // Solar generation with realistic ramp-up pattern
-        // 06:00-08:00: 0.3-0.5 kWh, 09:00-11:00: 1.0-1.8 kWh, 12:00-15:00: 2.2-2.7 kWh, 16:00-17:00: 1.2-0.8 kWh, 18:00+: 0
-        let solar = 0;
-        if (h === 6) solar = 0.3;
-        else if (h === 7) solar = 0.4;
-        else if (h === 8) solar = 0.5;
-        else if (h === 9) solar = 1.0;
-        else if (h === 10) solar = 1.5;
-        else if (h === 11) solar = 1.8;
-        else if (h === 12) solar = 2.2;
-        else if (h === 13) solar = 2.5;
-        else if (h === 14) solar = 2.7;
-        else if (h === 15) solar = 2.6;
-        else if (h === 16) solar = 1.2;
-        else if (h === 17) solar = 0.8;
-        // Scale by solar potential
-        solar = solar * (solarPotential === "high" ? 1.0 : solarPotential === "mid" ? 0.8 : 0.5);
+        // Solar generation: use scenario data for today, else illustrative mock
+        let solar: number;
+        if (solarOverride) {
+          solar = solarOverride[h] ?? 0;
+        } else {
+          // Illustrative mock: ramp-up pattern scaled by solar potential
+          let mockSolar = 0;
+          if (h === 6) mockSolar = 0.3;
+          else if (h === 7) mockSolar = 0.4;
+          else if (h === 8) mockSolar = 0.5;
+          else if (h === 9) mockSolar = 1.0;
+          else if (h === 10) mockSolar = 1.5;
+          else if (h === 11) mockSolar = 1.8;
+          else if (h === 12) mockSolar = 2.2;
+          else if (h === 13) mockSolar = 2.5;
+          else if (h === 14) mockSolar = 2.7;
+          else if (h === 15) mockSolar = 2.6;
+          else if (h === 16) mockSolar = 1.2;
+          else if (h === 17) mockSolar = 0.8;
+          solar = mockSolar * (solarPotential === "high" ? 1.0 : solarPotential === "mid" ? 0.8 : 0.5);
+        }
 
-        // Consumption has morning and evening peaks
-        const consumptionBase =
-          1.5 +
-          Math.sin(((h - 8) / 16) * Math.PI) * 1.2 +
-          (h >= 18 && h <= 21 ? 2 : 0);
-        // Cap at 2.7 kWh to prevent Energy flow bar overflow
-        const consumption = Math.min(2.7, consumptionBase);
+        // Consumption: use scenario data for today, else illustrative mock
+        let consumption: number;
+        if (consumptionOverride) {
+          consumption = consumptionOverride[h] ?? 0;
+        } else {
+          // Illustrative mock: morning + evening peaks
+          const consumptionBase =
+            1.5 +
+            Math.sin(((h - 8) / 16) * Math.PI) * 1.2 +
+            (h >= 18 && h <= 21 ? 2 : 0);
+          consumption = Math.min(2.7, consumptionBase);
+        }
 
-        // Grid pricing: off-peak until 18:00, then peak
-        const priceKwh = h < 18 ? 0.1 : 0.35;
-        const priceTier: "low" | "mid" | "high" =
-          h < 18 ? "low" : "high";
+        // Grid pricing: derive from scenario tariffSchedule when provided, else illustrative mock
+        let priceKwh: number;
+        let priceTier: "low" | "mid" | "high";
+        if (tariffOverride) {
+          const tf = findTariffForHour(h, tariffOverride);
+          priceKwh = tf.ratePence / 100;
+          priceTier = tf.tier;
+        } else {
+          priceKwh = h < 18 ? 0.1 : 0.35;
+          priceTier = h < 18 ? "low" : "high";
+        }
 
         // Confidence degrades for longer-term forecasts
         const daysDiff = Math.floor((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -183,8 +241,8 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
           ? Math.max(0.3, 1 - hoursIntoFuture / 120)
           : 1;
 
-        // Battery SOC from mock data
-        const soc = mockSOCData[h];
+        // Battery SOC: use scenario's hourlySOC when provided, else illustrative mock
+        const soc = socOverride ? (socOverride[h] ?? mockSOCData[h]) : mockSOCData[h];
 
         return {
           solar,
@@ -214,7 +272,16 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
   const allDays = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + i);
-    return generateDayData(date);
+    const dateISO = date.toISOString().split('T')[0];
+    const isToday = dateISO === todayISO;
+    // Pass scenario data only for today; other days stay illustrative
+    return generateDayData(
+      date,
+      isToday ? hourlySOC : undefined,
+      isToday ? tariffSchedule : undefined,
+      isToday ? hourlySolar : undefined,
+      isToday ? hourlyConsumption : undefined,
+    );
   });
 
   // Find today's index in the week
@@ -268,15 +335,34 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
     ),
   };
 
+  // Override icon for today derived from scenario.weather (Issue 1 fix).
+  // Only today's card uses this; all other days keep the solarPotential-based icon.
+  const todayWeatherIcon: JSX.Element | null = (() => {
+    if (!weatherDescription) return null;
+    const lower = weatherDescription.toLowerCase();
+    if (lower.includes('clear') || lower.includes('sunny')) return weatherIcons['high'];
+    if (lower.includes('cloud')) return weatherIcons['mid'];
+    return null; // unknown value → fall through to solarPotential icon
+  })();
+
   const priceTierColors = {
     low: "#5CB85C", // green
     mid: "#E8971A", // amber
     high: "#E57373", // red
   };
 
-  const maxEnergy = 3; // Max kWh for energy scale (0-3)
-  const maxGrid = 1.5; // Max kW for grid scale (-1.5 to +1.5)
-  const barContainerHeight = 240; // Plot area height in px (~80px per kWh)
+  // Fixed 5 kWh when today is shown with scenario data, ensuring a consistent
+  // visual scale across all three scenarios for evaluation validity.
+  // Non-today days use 3 kWh (illustrative mock data peaks at ~2.7 kWh).
+  const maxEnergy = isTodaySelected && (hourlySolar || hourlyConsumption) ? 5 : 3;
+  // Helper: format a kWh label, stripping trailing ".0"
+  const kwhLabel = (val: number) =>
+    `${val % 1 === 0 ? val : val.toFixed(1)} kWh`;
+  const GRID_MAX_IMPORT = 6;  // kWh: top of grid axis (import ceiling)
+  const GRID_MAX_EXPORT = 3;  // kWh: bottom of grid axis (export floor, as magnitude)
+  const barContainerHeight = 240; // Plot area height in px
+  // Zero line sits at 6/9 of the way down (import zone = 160 px, export zone = 80 px)
+  const gridZeroY = barContainerHeight * GRID_MAX_IMPORT / (GRID_MAX_IMPORT + GRID_MAX_EXPORT);
 
   // AI charging window
   const chargeStartHour = 14;
@@ -339,7 +425,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
             >
               {day.label}
             </div>
-            {/* Weather icon */}
+            {/* Weather icon — today uses scenario-derived icon, others use solarPotential */}
             <div
               style={{
                 display: "flex",
@@ -347,7 +433,9 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                 alignItems: "center",
               }}
             >
-              {weatherIcons[day.solarPotential]}
+              {day.date === todayISO && todayWeatherIcon
+                ? todayWeatherIcon
+                : weatherIcons[day.solarPotential]}
             </div>
           </button>
         ))}
@@ -421,9 +509,9 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
           >
             {activeTab === "energy" && (
               <>
-                <div style={{ position: "absolute", top: 0, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>3 kWh</div>
-                <div style={{ position: "absolute", top: barContainerHeight * 0.33, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>2 kWh</div>
-                <div style={{ position: "absolute", top: barContainerHeight * 0.67, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>1 kWh</div>
+                <div style={{ position: "absolute", top: 0, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>{kwhLabel(maxEnergy)}</div>
+                <div style={{ position: "absolute", top: barContainerHeight * 0.33, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>{kwhLabel(Math.round(maxEnergy * 2 / 3 * 10) / 10)}</div>
+                <div style={{ position: "absolute", top: barContainerHeight * 0.67, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>{kwhLabel(Math.round(maxEnergy / 3 * 10) / 10)}</div>
                 <div style={{ position: "absolute", top: barContainerHeight, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>0 kWh</div>
               </>
             )}
@@ -438,13 +526,15 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
             )}
             {activeTab === "grid" && (
               <>
-                <div style={{ position: "absolute", top: 0, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>+1.5 kW</div>
-                <div style={{ position: "absolute", top: barContainerHeight * 0.167, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>+1.0 kW</div>
-                <div style={{ position: "absolute", top: barContainerHeight * 0.333, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>+0.5 kW</div>
-                <div style={{ position: "absolute", top: barContainerHeight * 0.5, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>0</div>
-                <div style={{ position: "absolute", top: barContainerHeight * 0.667, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>−0.5 kW</div>
-                <div style={{ position: "absolute", top: barContainerHeight * 0.833, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>−1.0 kW</div>
-                <div style={{ position: "absolute", top: barContainerHeight, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>−1.5 kW</div>
+                {/* Import side: 0 to +6 kWh across gridZeroY (160 px) */}
+                <div style={{ position: "absolute", top: 0, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>+6 kWh</div>
+                <div style={{ position: "absolute", top: gridZeroY / 3, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>+4 kWh</div>
+                <div style={{ position: "absolute", top: gridZeroY * 2 / 3, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>+2 kWh</div>
+                <div style={{ position: "absolute", top: gridZeroY, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>0</div>
+                {/* Export side: 0 to −3 kWh across the remaining 80 px */}
+                <div style={{ position: "absolute", top: gridZeroY + (barContainerHeight - gridZeroY) / 3, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>−1 kWh</div>
+                <div style={{ position: "absolute", top: gridZeroY + (barContainerHeight - gridZeroY) * 2 / 3, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>−2 kWh</div>
+                <div style={{ position: "absolute", top: barContainerHeight, right: 0, fontFamily: fonts.family.sans, fontSize: 9, color: "#9CA3AF", textAlign: "right", transform: "translateY(-50%)", whiteSpace: "nowrap" }}>−3 kWh</div>
               </>
             )}
           </div>
@@ -632,7 +722,11 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
               )}
               {activeTab === "grid" && (
                 <>
-                  {/* Only zero line exists as mid-grey line in grid tab */}
+                  {/* Gridlines at every 2 kWh on import side and every 1 kWh on export side */}
+                  <div style={{ position: "absolute", left: 0, right: 0, top: gridZeroY / 3, height: 1, backgroundColor: "rgba(229, 231, 235, 0.5)", pointerEvents: "none", zIndex: 0 }} />
+                  <div style={{ position: "absolute", left: 0, right: 0, top: gridZeroY * 2 / 3, height: 1, backgroundColor: "rgba(229, 231, 235, 0.5)", pointerEvents: "none", zIndex: 0 }} />
+                  <div style={{ position: "absolute", left: 0, right: 0, top: gridZeroY + (barContainerHeight - gridZeroY) / 3, height: 1, backgroundColor: "rgba(229, 231, 235, 0.5)", pointerEvents: "none", zIndex: 0 }} />
+                  <div style={{ position: "absolute", left: 0, right: 0, top: gridZeroY + (barContainerHeight - gridZeroY) * 2 / 3, height: 1, backgroundColor: "rgba(229, 231, 235, 0.5)", pointerEvents: "none", zIndex: 0 }} />
                 </>
               )}
 
@@ -976,14 +1070,15 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                       )}
 
                       {activeTab === "grid" && (() => {
-                        // Calculate grid import/export
-                        // Import = consumption - solar (when positive)
-                        // Export = solar - consumption (when negative, rendered as export)
-                        const gridNetRaw = consumption - solar;
-                        // Cap at ±1.2 kW to prevent overflow
-                        const gridNet = Math.max(-1.2, Math.min(1.2, gridNetRaw));
-                        const gridHeight = (Math.abs(gridNet) / maxGrid) * (barContainerHeight / 2);
-                        const isImport = gridNet > 0;
+                        // Grid flow: use scenario-derived data for today, mock for other days
+                        const gridValue = isTodaySelected && hourlyGridFlow
+                          ? hourlyGridFlow[h]
+                          : (consumption - solar);
+                        const isImport = gridValue >= 0;
+                        // Asymmetric height: import bars scale against gridZeroY, export against the smaller zone below
+                        const gridHeight = isImport
+                          ? (Math.min(gridValue, GRID_MAX_IMPORT) / GRID_MAX_IMPORT) * gridZeroY
+                          : (Math.min(Math.abs(gridValue), GRID_MAX_EXPORT) / GRID_MAX_EXPORT) * (barContainerHeight - gridZeroY);
 
                         // Calculate confidence band extent for forecast hours (DR9)
                         const hoursFromNow = h - currentHour;
@@ -1019,17 +1114,17 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                         const gridBandHeight = gridHeight * bandExtentPercent;
                         const gridBandTotalHeight = gridHeight + 2 * gridBandHeight;
 
-                        // Cap bands at ±4.5 kW gridlines (which is barContainerHeight / 2 from center)
-                        const maxBandExtent = barContainerHeight / 2;
+                        // Cap bands to the relevant axis zone height
+                        const maxBandExtent = isImport ? gridZeroY : (barContainerHeight - gridZeroY);
                         const cappedBandTotalHeight = Math.min(gridBandTotalHeight, maxBandExtent);
 
                         return (
                           <>
-                            {/* Zero line reference (horizontal line through middle) */}
+                            {/* Zero line reference — sits at gridZeroY (160 px from top) */}
                             <div
                               style={{
                                 position: "absolute",
-                                top: "50%",
+                                top: gridZeroY,
                                 left: 0,
                                 right: 0,
                                 height: 1,
@@ -1048,7 +1143,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                                   opacity: gridBandOpacity,
                                   borderRadius: isImport ? "4px 4px 0 0" : "0 0 4px 4px",
                                   position: "absolute",
-                                  [isImport ? "bottom" : "top"]: "50%",
+                                  [isImport ? "bottom" : "top"]: `${isImport ? barContainerHeight - gridZeroY : gridZeroY}px`,
                                   left: "50%",
                                   transform: "translateX(-50%)",
                                   zIndex: 0,
@@ -1081,7 +1176,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                                     : "none",
                                 borderRadius: isImport ? "4px 4px 0 0" : "0 0 4px 4px",
                                 position: "absolute",
-                                [isImport ? "bottom" : "top"]: "50%",
+                                [isImport ? "bottom" : "top"]: `${isImport ? barContainerHeight - gridZeroY : gridZeroY}px`,
                                 left: "50%",
                                 transform: "translateX(-50%)",
                                 zIndex: 1,
@@ -1126,12 +1221,16 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                 const daysAhead = Math.floor((selectedDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
 
                 if (daysAhead === 0) {
-                  // Today: split at NOW
+                  // Today: split at the current hour
                   const nowIndex = currentHour;
                   pastPoints = nowIndex >= 0 ? points.slice(0, nowIndex + 1) : [];
                   forecastPoints = nowIndex >= 0 && nowIndex < points.length - 1 ? points.slice(nowIndex) : [];
+                } else if (daysAhead < 0) {
+                  // Past day: every hour is historical — render all as solid past
+                  pastPoints = points;
+                  forecastPoints = [];
                 } else {
-                  // Future days: all hours are forecast
+                  // Future day: nothing has happened yet — render all as forecast/dashed
                   pastPoints = [];
                   forecastPoints = points;
                 }
@@ -1287,9 +1386,11 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                 const prevSoc = tooltipHour > 0 ? selectedDay.hours[tooltipHour - 1].soc : tooltipData.soc;
                 const socChange = tooltipData.soc - prevSoc;
                 
-                // Calculate grid flow
-                const gridNet = tooltipData.consumption - tooltipData.solar;
-                const isImport = gridNet > 0;
+                // Grid flow: use scenario-derived data for today, mock for other days
+                const gridValue = isTodaySelected && hourlyGridFlow
+                  ? hourlyGridFlow[tooltipHour]
+                  : tooltipData.consumption - tooltipData.solar;
+                const isImport = gridValue >= 0;
                 
                 // Calculate hourly cost
                 const hourlyCost = tooltipData.consumption * tooltipData.priceKwh;
@@ -1305,14 +1406,17 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                 } else if (activeTab === "battery") {
                   barTopHeight = (tooltipData.soc / 100) * barContainerHeight;
                 } else if (activeTab === "grid") {
-                  const gridHeight = (Math.abs(gridNet) / maxGrid) * (barContainerHeight / 2);
+                  // Asymmetric axis: import zone = gridZeroY (160 px), export zone = 80 px
+                  const tooltipGridHeight = isImport
+                    ? (Math.min(gridValue, GRID_MAX_IMPORT) / GRID_MAX_IMPORT) * gridZeroY
+                    : (Math.min(Math.abs(gridValue), GRID_MAX_EXPORT) / GRID_MAX_EXPORT) * (barContainerHeight - gridZeroY);
                   if (isImport) {
-                    // Import bar extends upward - tooltip above
-                    barTopHeight = barContainerHeight / 2 + gridHeight;
+                    // Import bar extends upward from zero line — tooltip above
+                    barTopHeight = (barContainerHeight - gridZeroY) + tooltipGridHeight;
                     positionBelow = false;
                   } else {
-                    // Export bar extends downward - tooltip below
-                    barTopHeight = barContainerHeight / 2 - gridHeight;
+                    // Export bar extends downward from zero line — tooltip below
+                    barTopHeight = barContainerHeight - gridZeroY;
                     positionBelow = true;
                   }
                 }
@@ -1496,7 +1600,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
                         {activeTab === "grid" && (
                           <>
                             <div>
-                              Grid flow: {isImport ? "+" : "−"}{Math.abs(gridNet).toFixed(1)} kWh {isImport ? "imported" : "exported"}
+                              Grid flow: {isImport ? "+" : "−"}{Math.abs(gridValue).toFixed(1)} kWh {isImport ? "imported" : "exported"}
                             </div>
                             {showCausalContext && (
                               <div style={{ borderTop: "1px solid #E5E7EB", marginTop: 6, paddingTop: 6 }}>
@@ -1552,7 +1656,9 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
             >
               {selectedDay.hours.map((hourData, h) => {
                 const { priceTier, priceKwh } = hourData;
-                const pillColor = priceTier === "low" ? "#5BB85B" : "#E8735F";
+                const pillColor =
+                  priceTier === "low" ? "#5BB85B" :
+                  priceTier === "mid" ? "#E8971A" : "#E8735F";
                 
                 return (
                   <div
@@ -1629,9 +1735,12 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false }:
 
               {/* Carbon pills */}
               {selectedDay.hours.map((hourData, h) => {
-                // Mock carbon intensity data (gCO₂/kWh)
-                const carbonValues = [210, 220, 230, 240, 250, 260, 240, 220, 200, 190, 180, 170, 160, 155, 150, 160, 170, 180, 200, 220, 240, 250, 260, 250];
-                const carbonValue = carbonValues[h];
+                // Illustrative mock carbon values (used for non-today days)
+                const mockCarbonValues = [210, 220, 230, 240, 250, 260, 240, 220, 200, 190, 180, 170, 160, 155, 150, 160, 170, 180, 200, 220, 240, 250, 260, 250];
+                // Use scenario hourlyCarbon for today; fall back to illustrative mock for all other days
+                const carbonValue = (isTodaySelected && hourlyCarbon)
+                  ? (hourlyCarbon[h] ?? mockCarbonValues[h])
+                  : mockCarbonValues[h];
 
                 // Determine color based on carbon intensity
                 let pillBg: string;
