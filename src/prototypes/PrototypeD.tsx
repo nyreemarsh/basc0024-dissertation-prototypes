@@ -303,6 +303,17 @@ export function PrototypeD() {
   // three study scenarios.
 
   const getWhatIfContent = () => {
+    // Derivations used across the three what-if branches
+    const peakRatePence = Math.max(...tariffSchedule.map(b => b.ratePence));
+    const peakBand = tariffSchedule.find(b => b.ratePence === peakRatePence);
+    const peakStartTime = peakBand?.from ?? "16:00";
+    const chargeBandWhatIf = findTariffBand(tariffSchedule, chargeWindowStart);
+    const chargeRatePenceWhatIf = chargeBandWhatIf?.ratePence ?? 0;
+    // Solar-dominant scenarios use "prioritised solar charging"; grid-scheduled use "scheduled off-peak charging"
+    const chargingActionText = Math.max(...scenario.hourlySolar) >= 2
+      ? "prioritised solar charging"
+      : "scheduled off-peak charging";
+
     if (activeWhatIf === "lowerSolar") {
       return {
         title: "What if solar was 50% lower?",
@@ -310,20 +321,20 @@ export function PrototypeD() {
         yAxisLabel: "%",
         summary: (
           <>
-            With 50% less solar, charging at 16:00 instead of 19:00 saves{" "}
+            With 50% less solar, charging at {chargeWindowStart} instead of {peakStartTime} saves{" "}
             <span style={{ fontWeight: fonts.weight.semibold }}>£0.32</span> and avoids{" "}
             <span style={{ fontWeight: fonts.weight.semibold }}>0.8 kg</span> of additional CO₂.
           </>
         ),
         actualCard: {
-          time: "Charge at 16:00",
+          time: `Charge at ${chargeWindowStart}`,
           rate: "Off-peak (£0.10/kWh)",
           cost: "~£0.38",
         },
         alternativeCard: {
           badge: "+£0.32 MORE",
           badgeColor: "#E8735F",
-          time: "Charge at 19:00",
+          time: `Charge at ${peakStartTime}`,
           rate: "Peak (£0.35/kWh)",
           cost: "~£0.70",
         },
@@ -332,8 +343,8 @@ export function PrototypeD() {
           actualFill: "M 0,196 L 40,196 L 80,196 L 120,196 L 160,196 L 200,196 L 240,56 L 280,56 L 320,71 L 360,90 L 400,103 L 400,280 L 0,280 Z",
           alternative: "M 0,196 L 40,196 L 80,196 L 120,196 L 160,196 L 200,196 L 240,196 L 280,69 L 320,69 L 360,97 L 400,112",
         },
-        actualLegend: "Actual (16:00)",
-        alternativeLegend: "If charged at 19:00",
+        actualLegend: `Actual (${chargeWindowStart})`,
+        alternativeLegend: `If charged at ${peakStartTime}`,
         xAxisLabels: ["14:00", "16:00", "19:00", "21:00", "23:00"],
         yAxisLabels: ["100%", "67%", "33%", "0%"],
       };
@@ -343,7 +354,7 @@ export function PrototypeD() {
         chartTitle: "Cost comparison",
         yAxisLabel: "£",
         summary: null,
-        causalText: "AI shifted charging to off-peak hours (01:00–05:00 at 7p/kWh), avoiding 34p/kWh peak.",
+        causalText: `AI scheduled charging at ${chargeWindowStart}–${chargeWindowEnd} at ${chargeRatePenceWhatIf}p/kWh, avoiding ${peakRatePence}p/kWh peak.`,
         metricCards: [
           { label: "Saved today", value: "£1.40" },
           { label: "Peak rate", value: "£2.85 vs actual: £1.45" },
@@ -364,7 +375,7 @@ export function PrototypeD() {
         chartTitle: "Grid dependency",
         yAxisLabel: "kWh",
         summary: null,
-        causalText: "At 15% SOC, AI prioritised solar charging. Full battery would have exported surplus.",
+        causalText: `At ${scenario.batterySOCPct}% SOC, AI ${chargingActionText}. Full battery would have exported surplus.`,
         metricCards: [
           { label: "Grid import reduced", value: "3.2 kWh" },
           { label: "Excess solar", value: "Exports 2.1 kWh" },
