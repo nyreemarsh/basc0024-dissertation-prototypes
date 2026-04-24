@@ -7,8 +7,8 @@ import { scenario1, scenario2, scenario3 } from './scenarios'
 
 function App() {
   return (
-    <ScenarioProvider scenario={scenario1}>
-      <PrototypeA />
+    <ScenarioProvider scenario={scenario3}>
+      <PrototypeC />
     </ScenarioProvider>
   )
 }

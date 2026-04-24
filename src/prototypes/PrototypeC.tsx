@@ -1,28 +1,265 @@
+import { useState } from "react";
 import { Shell } from "./components/shared/Shell";
 import { Header } from "./components/shared/Header";
 import { SummaryCard } from "./components/shared/SummaryCard";
 import { TemporalNav } from "./components/shared/TemporalNav";
-import { fonts } from "./tokens";
+import { colors, fonts } from "./tokens";
+import { useScenario } from "../context/ScenarioContext";
+import type { CausalFactors, FactorWeight, Scenario, TariffBand } from "../scenarios/types";
 
 /**
  * Prototype C — Comprehensible+ / Uncertainty-Integrated (DR9)
  *
- * Inherits: All of Prototype A + B
- * Adds: Forecast uncertainty visualisation via confidence bands on the chart,
- *       and uncertainty qualifier in the CausalPanel's solar forecast block
+ * Inherits: All of Prototype A + B (time-aware logic, causal factors)
+ * Adds:
+ *   - Forecast accuracy statement in SummaryCard (forecastAccuracyPct + forecastVariancePct)
+ *   - Confidence qualifier badge on each causal factor, derived from factor weight:
+ *       primary | high   → "High confidence"  (opacity 1.0)
+ *       moderate         → "Moderate"          (opacity 0.6)
+ *       low              → "Low confidence"    (opacity 0.3)
+ *   - TemporalNav uses variant="hatched" to visually encode forecast uncertainty
+ *     via diagonal hatched fills on the chart. The hatched visual encoding is a
+ *     fixed design pattern — not parameterised from hourly scenario data.
  *
  * DR9: Forecast uncertainty must be visually encoded, not suppressed.
- *
- * The confidence band widens progressively from the current time toward the
- * forecast horizon, visually encoding degrading confidence over time.
  *
  * Still withholds:
  * - No comparison with alternative decisions
  *
  * Forecast encoding: diagonal hatched fill with confidence-based opacity/density (variant="hatched")
  */
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Parses the hour component from a 'HH:MM' string. */
+function toHour(hhmm: string): number {
+  return parseInt(hhmm.split(':')[0], 10);
+}
+
+/** Formats a pence integer as a £-prefixed display string. e.g. 85 → '£0.85'. */
+function formatPounds(pence: number): string {
+  return `£${(pence / 100).toFixed(2)}`;
+}
+
+/**
+ * Returns the TariffBand covering the given 'HH:MM' time string,
+ * with minute-level precision for half-hour boundaries (e.g. '18:30').
+ */
+function findTariffBand(schedule: TariffBand[], hhmm: string): TariffBand | undefined {
+  const [h, m] = hhmm.split(':').map(Number);
+  const totalMin = h * 60 + m;
+  return schedule.find(band => {
+    const [fh, fm] = band.from.split(':').map(Number);
+    const fromMin = fh * 60 + fm;
+    const [th, tm] = band.to === '00:00' ? [24, 0] : band.to.split(':').map(Number);
+    const toMin = th * 60 + tm;
+    return totalMin >= fromMin && totalMin < toMin;
+  });
+}
+
+/**
+ * Maps a factor weight to its confidence qualifier label and dot opacity.
+ * Opacity encodes certainty: 1.0 = fully confident, lower = more uncertain.
+ */
+function weightToConfidence(weight: Exclude<FactorWeight, 'none'>): {
+  label: string;
+  opacity: number;
+} {
+  switch (weight) {
+    case 'primary':
+    case 'high':     return { label: 'High confidence', opacity: 1.0 };
+    case 'moderate': return { label: 'Moderate',        opacity: 0.6 };
+    case 'low':      return { label: 'Low confidence',  opacity: 0.3 };
+  }
+}
+
+// ── Causal factor rendering ───────────────────────────────────────────────────
+
+const WEIGHT_ORDER: FactorWeight[] = ['primary', 'high', 'moderate', 'low'];
+const FACTOR_KEYS: (keyof CausalFactors)[] = [
+  'solar', 'gridPricing', 'carbonIntensity', 'batteryHeadroom', 'userPreference',
+];
+
+interface FactorItem {
+  color: string;
+  boldText: string;
+  confidenceLabel: string;
+  confidenceOpacity: number;
+  consequenceText: string;
+}
+
+/**
+ * Builds the ordered list of causal factor display items from scenario data.
+ * Factors with weight 'none' are excluded. Remaining factors are sorted
+ * primary → high → moderate → low.
+ *
+ * Each item includes a confidence qualifier derived from its weight (DR9).
+ */
+function buildFactorItems(scenario: Scenario): FactorItem[] {
+  const {
+    causalFactors, solarForecast, tariffSchedule, savingsBreakdown,
+    batterySOCPct, chargeWindowStart, carbonIntensity, userOverride,
+  } = scenario;
+
+  const chargeBand = findTariffBand(tariffSchedule, chargeWindowStart);
+  const chargeBandRate = chargeBand?.ratePence ?? 0;
+  const chargeBandUntil = chargeBand?.to ?? '00:00';
+
+  type FactorConfig = Omit<FactorItem, 'confidenceLabel' | 'confidenceOpacity'>;
+
+  const factorConfig: Record<keyof CausalFactors, FactorConfig> = {
+    solar: {
+      color: "#E8971A",
+      boldText:
+        solarForecast.peakWindowStart && solarForecast.peakWindowEnd
+          ? `Solar generation is forecast to peak ${solarForecast.peakWindowStart}–${solarForecast.peakWindowEnd}`
+          : "Solar generation forecast",
+      consequenceText: "maximising free energy capture",
+    },
+    gridPricing: {
+      color: "#2FA75A",
+      boldText: `Grid tariff is expected to remain at ${formatPounds(chargeBandRate)}/kWh until ${chargeBandUntil}`,
+      consequenceText: `charging before the price rise saves ${formatPounds(savingsBreakdown.offPeakPence)}`,
+    },
+    carbonIntensity: {
+      color: colors.brand.carbonIntensity,
+      boldText:
+        carbonIntensity.length > 0
+          ? `Grid carbon intensity is ${carbonIntensity[0].gCO2perKWh} gCO₂/kWh at ${carbonIntensity[0].time}`
+          : "Grid carbon intensity is elevated",
+      consequenceText: "charging later uses cleaner grid energy",
+    },
+    batteryHeadroom: {
+      color: "#2596BE",
+      boldText: `Battery was at ${batterySOCPct}%, below recommended level`,
+      consequenceText: "prioritising charge to maintain household supply",
+    },
+    userPreference: {
+      color: "#9CA3AF",
+      boldText: userOverride
+        ? `${userOverride.originalScheduleDescription} scheduled for ${userOverride.originalWindowStart}–${userOverride.originalWindowEnd}`
+        : "Your scheduled preferences",
+      consequenceText: "rescheduled to avoid unexpected price surge",
+    },
+  };
+
+  return FACTOR_KEYS
+    .filter(key => causalFactors[key] !== 'none')
+    .sort((a, b) =>
+      WEIGHT_ORDER.indexOf(causalFactors[a]) - WEIGHT_ORDER.indexOf(causalFactors[b])
+    )
+    .map(key => {
+      const weight = causalFactors[key] as Exclude<FactorWeight, 'none'>;
+      const { label, opacity } = weightToConfidence(weight);
+      return {
+        ...factorConfig[key],
+        confidenceLabel: label,
+        confidenceOpacity: opacity,
+      };
+    });
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function PrototypeC() {
-  // Causal explanation content (DR8)
+  const scenario = useScenario();
+  const {
+    chargeWindowStart, chargeWindowEnd,
+    costTodayPence, savingsPence, savingsBreakdown, co2AvoidedKg,
+    forecastAccuracyPct, forecastVariancePct,
+  } = scenario;
+
+  // Time-aware charging state (mirrors PrototypeA/B)
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentMinutes = now.getMinutes();
+
+  const chargeStart = toHour(chargeWindowStart);
+  const chargeEnd = toHour(chargeWindowEnd);
+
+  const todayISO = now.toISOString().split("T")[0];
+
+  const [selectedDayInfo, setSelectedDayInfo] = useState<{
+    date: string;
+    isToday: boolean;
+    isPast: boolean;
+    isFuture: boolean;
+  }>({
+    date: todayISO,
+    isToday: true,
+    isPast: false,
+    isFuture: false,
+  });
+
+  const isBeforeCharge = currentHour < chargeStart;
+  const isDuringCharge = currentHour >= chargeStart && currentHour < chargeEnd;
+  const isAfterCharge = currentHour >= chargeEnd;
+
+  let batterySOC = scenario.batterySOCPct;
+  if (isDuringCharge) {
+    const minutesSinceChargeStart = (currentHour - chargeStart) * 60 + currentMinutes;
+    const totalChargeMinutes = (chargeEnd - chargeStart) * 60;
+    batterySOC = Math.round(
+      scenario.batterySOCPct +
+        ((100 - scenario.batterySOCPct) * minutesSinceChargeStart) / totalChargeMinutes
+    );
+  } else if (isAfterCharge) {
+    batterySOC = 100;
+  }
+
+  let chargingState: "charging-solar" | "charging-grid" | "discharging" | "idle" = "idle";
+  if (isDuringCharge) {
+    chargingState = "charging-grid";
+  }
+
+  // Notification text — time-aware
+  let notificationText = "";
+  if (selectedDayInfo.isToday && isBeforeCharge) {
+    notificationText = `Your battery is scheduled to charge today at ${chargeWindowStart}. Charging will complete by ${chargeWindowEnd}.`;
+  } else if (selectedDayInfo.isToday && isDuringCharge) {
+    notificationText = `Your battery is charging now. Started at ${chargeWindowStart}, scheduled to complete by ${chargeWindowEnd}.`;
+  } else if (selectedDayInfo.isToday && isAfterCharge) {
+    notificationText = `Your battery finished charging today at ${chargeWindowEnd}. Battery is now at 100%.`;
+  } else if (selectedDayInfo.isPast) {
+    notificationText = `Battery charged at ${chargeWindowStart}. Charging completed at ${chargeWindowEnd}.`;
+  } else if (selectedDayInfo.isFuture) {
+    notificationText = `Battery is scheduled to charge at ${chargeWindowStart}. Charging will complete by ${chargeWindowEnd}.`;
+  }
+
+  // Cost text — today includes savings breakdown; past/future use scaffolding
+  let costText = "";
+  if (selectedDayInfo.isToday) {
+    costText = [
+      `Estimated cost today: ${formatPounds(costTodayPence)}`,
+      `Estimated savings: ${formatPounds(savingsPence)} (${formatPounds(savingsBreakdown.solarPence)} solar · ${formatPounds(savingsBreakdown.offPeakPence)} off-peak)`,
+      `CO₂ avoided: ${co2AvoidedKg} kg`,
+    ].join(' · ');
+  } else if (selectedDayInfo.isPast) {
+    const dayOfWeek = new Date(selectedDayInfo.date).getDay();
+    const pastCosts = [
+      { cost: "£2.80", savings: "£0.90", co2: "1.8 kg" }, // Sunday
+      { cost: "£3.10", savings: "£1.05", co2: "2.0 kg" }, // Monday
+      { cost: "£2.95", savings: "£1.15", co2: "2.2 kg" }, // Tuesday
+      { cost: "£3.25", savings: "£1.30", co2: "2.5 kg" }, // Wednesday
+      { cost: "£3.50", savings: "£1.40", co2: "2.7 kg" }, // Thursday
+      { cost: "£2.85", savings: "£0.95", co2: "1.9 kg" }, // Friday
+      { cost: "£3.00", savings: "£1.00", co2: "2.0 kg" }, // Saturday
+    ];
+    const { cost, savings, co2 } = pastCosts[dayOfWeek];
+    costText = `Total cost: ${cost} · Savings: ${savings} · CO₂ avoided: ${co2}`;
+  } else if (selectedDayInfo.isFuture) {
+    costText = "Forecast cost: £3.15 · Forecast savings: £1.10 · Forecast CO₂ avoided: 2.3 kg";
+  }
+
+  // Forecast accuracy string — omits the ±X% qualifier when forecastVariancePct is absent (S3)
+  const forecastAccuracy = forecastVariancePct !== undefined
+    ? `Forecast accuracy: ${forecastAccuracyPct}% — yesterday's forecast was within ±${forecastVariancePct}% of actual`
+    : `Forecast accuracy: ${forecastAccuracyPct}%`;
+
+  const showModifyButton = selectedDayInfo.isToday && !isAfterCharge;
+
+  const factorItems = buildFactorItems(scenario);
+
   const explanationContent = (
     <div>
       <div
@@ -34,93 +271,70 @@ export function PrototypeC() {
           marginBottom: 12,
         }}
       >
-        EnergyView charged at 14:00–16:00 because:
+        EnergyView charged at {chargeWindowStart}–{chargeWindowEnd} because:
       </div>
 
-      {/* Factor 1: Solar */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+      {factorItems.map((item, index) => (
         <div
+          key={index}
           style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            backgroundColor: "#E8971A",
-            marginTop: 5,
-            flexShrink: 0,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            marginBottom: index < factorItems.length - 1 ? 10 : 0,
           }}
-        />
-        <div style={{ fontFamily: fonts.family.sans, fontSize: 13, lineHeight: 1.5 }}>
-          <span style={{ color: "#374151", fontWeight: fonts.weight.semibold }}>Solar generation is forecast to peak 12:00–15:00</span>
-          {" "}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#1F2937", opacity: 0.6, display: "inline-block" }} />
-            <span style={{ fontSize: 12, fontWeight: fonts.weight.semibold, color: "#6B7280" }}>High confidence</span>
-          </span>
-          <span style={{ color: "#6B7280" }}> — maximising free energy capture</span>
+        >
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              backgroundColor: item.color,
+              marginTop: 5,
+              flexShrink: 0,
+            }}
+          />
+          <div style={{ fontFamily: fonts.family.sans, fontSize: 13, lineHeight: 1.5 }}>
+            <span style={{ color: "#374151", fontWeight: fonts.weight.semibold }}>
+              {item.boldText}
+            </span>
+            {" "}
+            {/* Confidence qualifier badge — DR9 addition vs Prototype B */}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  backgroundColor: "#1F2937",
+                  opacity: item.confidenceOpacity,
+                  display: "inline-block",
+                }}
+              />
+              <span style={{ fontSize: 12, fontWeight: fonts.weight.semibold, color: "#6B7280" }}>
+                {item.confidenceLabel}
+              </span>
+            </span>
+            <span style={{ color: "#6B7280" }}> — {item.consequenceText}</span>
+          </div>
         </div>
-      </div>
-
-      {/* Factor 2: Grid tariff */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
-        <div
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            backgroundColor: "#2FA75A",
-            marginTop: 5,
-            flexShrink: 0,
-          }}
-        />
-        <div style={{ fontFamily: fonts.family.sans, fontSize: 13, lineHeight: 1.5 }}>
-          <span style={{ color: "#374151", fontWeight: fonts.weight.semibold }}>Grid tariff is expected to remain at £0.10/kWh until 18:00</span>
-          {" "}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#1F2937", opacity: 0.35, display: "inline-block" }} />
-            <span style={{ fontSize: 12, fontWeight: fonts.weight.semibold, color: "#6B7280" }}>Moderate</span>
-          </span>
-          <span style={{ color: "#6B7280" }}> — charging before the evening price rise saves £0.85</span>
-        </div>
-      </div>
-
-      {/* Factor 3: Battery level */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <div
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            backgroundColor: "#2596BE",
-            marginTop: 5,
-            flexShrink: 0,
-          }}
-        />
-        <div style={{ fontFamily: fonts.family.sans, fontSize: 13, lineHeight: 1.5 }}>
-          <span style={{ color: "#374151", fontWeight: fonts.weight.semibold }}>Battery was at 30%, below recommended level</span>
-          {" "}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#1F2937", opacity: 1, display: "inline-block" }} />
-            <span style={{ fontSize: 12, fontWeight: fonts.weight.semibold, color: "#6B7280" }}>Confirmed</span>
-          </span>
-          <span style={{ color: "#6B7280" }}> — prioritising charge to maintain household supply</span>
-        </div>
-      </div>
+      ))}
     </div>
   );
 
   return (
     <Shell>
-      <Header batterySOC={100} chargingState="idle" />
+      <Header batterySOC={batterySOC} chargingState={chargingState} />
 
       <SummaryCard
-        text="Your battery finished charging today at 16:00. Battery is now at 100%."
-        costText="Estimated cost today: £3.40 · Estimated savings: £1.20 (£0.85 solar · £0.35 off-peak) · CO₂ avoided: 2.1 kg"
-        forecastAccuracy="Forecast accuracy: 87% — yesterday's forecast was within ±8% of actual"
-        showModifyButton={false}
+        text={notificationText}
+        costText={costText}
+        forecastAccuracy={forecastAccuracy}
+        showModifyButton={showModifyButton}
         expandableExplanation={explanationContent}
       />
 
-      <TemporalNav variant="hatched" showCausalContext={true} />
+      <TemporalNav variant="hatched" showCausalContext={true} onDayChange={setSelectedDayInfo} />
     </Shell>
   );
 }
