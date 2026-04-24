@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactElement } from "react";
 import { colors, fonts, space, radius } from "../../tokens";
 import { Sun, Moon } from "lucide-react";
 import type { TariffBand } from "../../../scenarios/types";
@@ -123,7 +123,6 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
   // Derive current time from system clock
   const now = new Date();
   const currentHour = now.getHours();
-  const currentMinuteFraction = now.getMinutes() / 60;
   
   // Today's date
   const today = now;
@@ -176,7 +175,6 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
 
     const isToday = dateISO === todayISO;
     const isPast = date < today;
-    const isFuture = date > today;
 
     const hours: HourData[] = Array.from(
       { length: 24 },
@@ -309,7 +307,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
   }, [selectedDayIndex, selectedDay.date, isTodaySelected, isPastDay, isFutureDay, onDayChange]);
 
   // Weather icon mapping based on solar potential
-  const weatherIcons: Record<string, JSX.Element> = {
+  const weatherIcons: Record<string, ReactElement> = {
     high: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="5"/>
@@ -337,7 +335,7 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
 
   // Override icon for today derived from scenario.weather (Issue 1 fix).
   // Only today's card uses this; all other days keep the solarPotential-based icon.
-  const todayWeatherIcon: JSX.Element | null = (() => {
+  const todayWeatherIcon: ReactElement | null = (() => {
     if (!weatherDescription) return null;
     const lower = weatherDescription.toLowerCase();
     if (lower.includes('clear') || lower.includes('sunny')) return weatherIcons['high'];
@@ -345,11 +343,6 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
     return null; // unknown value → fall through to solarPotential icon
   })();
 
-  const priceTierColors = {
-    low: "#5CB85C", // green
-    mid: "#E8971A", // amber
-    high: "#E57373", // red
-  };
 
   // Fixed 5 kWh when today is shown with scenario data, ensuring a consistent
   // visual scale across all three scenarios for evaluation validity.
@@ -795,8 +788,6 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
                 const {
                   solar,
                   consumption,
-                  priceKwh,
-                  priceTier,
                   isRetrospective,
                   confidence = 1,
                 } = hourData;
@@ -820,18 +811,12 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
                 // Nighttime determination
                 const nightStartHour = Math.floor(selectedDay.sunsetTime);
                 const dayStartHour = Math.floor(selectedDay.sunriseTime);
-                const isNighttime = h < dayStartHour || h >= nightStartHour;
                 const isSunsetHour = h === nightStartHour;
-                const isSunsetHourSplit = h === nightStartHour; // For the gradient effect within the hour (deprecated)
 
                 // Sunrise determination
                 const isSunriseHour = h === dayStartHour;
 
                 // Forecast encoding
-                const forecastOpacity =
-                  variant === "solid"
-                    ? 0.4
-                    : confidence * 0.7 + 0.3;
                 const hatchDensity =
                   variant === "hatched"
                     ? Math.floor(confidence * 4) + 2
@@ -1391,9 +1376,6 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
                   ? hourlyGridFlow[tooltipHour]
                   : tooltipData.consumption - tooltipData.solar;
                 const isImport = gridValue >= 0;
-                
-                // Calculate hourly cost
-                const hourlyCost = tooltipData.consumption * tooltipData.priceKwh;
                 
                 // Calculate bar heights for positioning
                 let barTopHeight = 0; // Distance from bottom of container to top of bar
