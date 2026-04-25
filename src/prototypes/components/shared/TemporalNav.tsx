@@ -66,6 +66,13 @@ interface TemporalNavProps {
   /** Optional user-scheduled appliance override (Scenario 3 only). When present,
    *  cancelled and rescheduled appliance windows are shown above the Energy/Grid charts. */
   userOverride?: UserOverride;
+  /** Pins the "current hour" (format 'HH:MM'). When set, overrides system clock for
+   *  the NOW indicator, past/future bar styling, and strip colouring. */
+  nowOverride?: string;
+  /** Pins which calendar date is treated as "today" ('YYYY-MM-DD').
+   *  When set, the week is generated around this date rather than the system date,
+   *  ensuring the scenario day card is always highlighted correctly. */
+  scenarioDate?: string;
 }
 
 interface HourData {
@@ -104,7 +111,7 @@ interface DayData {
  * - "solid" (A/B): retrospective = full opacity, forecast = 40% opacity
  * - "hatched" (C/D): retrospective = full opacity, forecast = diagonal hatch with confidence-based opacity/density
  */
-export function TemporalNav({ variant, onDayChange, showCausalContext = false, weatherDescription, hourlySOC, tariffSchedule, hourlyCarbon, hourlySolar, hourlyConsumption, hourlyGridFlow, userOverride }: TemporalNavProps) {
+export function TemporalNav({ variant, onDayChange, showCausalContext = false, weatherDescription, hourlySOC, tariffSchedule, hourlyCarbon, hourlySolar, hourlyConsumption, hourlyGridFlow, userOverride, nowOverride, scenarioDate }: TemporalNavProps) {
   // Layout constants for column-based positioning
   const COLUMN_GAP = 8; // gap between columns in px (corresponds to space[2])
   
@@ -140,13 +147,14 @@ export function TemporalNav({ variant, onDayChange, showCausalContext = false, w
     return () => resizeObserver.disconnect();
   }, []);
   
-  // Derive current time from system clock
-  const now = new Date();
-  const currentHour = now.getHours();
-  
-  // Today's date
-  const today = now;
-  const todayISO = today.toISOString().split('T')[0];
+  // Resolve current hour and today's date — uses scenario's nowOverride/scenarioDate
+  // when provided so every session sees an identical visual state regardless of run time.
+  const currentHour = nowOverride
+    ? parseInt(nowOverride.split(':')[0], 10)
+    : new Date().getHours();
+  const todayISO = scenarioDate ?? new Date().toISOString().split('T')[0];
+  // Build a Date object for week-generation; use noon to avoid UTC-offset midnight issues.
+  const today = new Date(todayISO + 'T12:00:00');
 
   // Calculate week start (Monday) and generate 7 days
   const getMonday = (date: Date): Date => {

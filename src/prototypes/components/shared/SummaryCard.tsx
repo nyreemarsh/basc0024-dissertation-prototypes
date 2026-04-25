@@ -106,31 +106,17 @@ export function SummaryCard({ text, costText, forecastAccuracy, onExplainClick, 
       )}
 
       {showModifyButton && (
-        <button
+        <p
           style={{
             marginTop: 12,
-            background: "none",
-            border: "1px solid #F59E0B",
-            borderRadius: 6,
-            padding: "8px 16px",
             fontFamily: fonts.family.sans,
             fontSize: 13,
-            color: "#F59E0B",
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.05)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "transparent";
+            color: "#9CA3AF",
+            userSelect: "none",
           }}
         >
-          Modify schedule
-          <span>→</span>
-        </button>
+          AI-managed schedule
+        </p>
       )}
 
       {(onExplainClick || expandableExplanation) && (
@@ -159,7 +145,7 @@ export function SummaryCard({ text, costText, forecastAccuracy, onExplainClick, 
               e.currentTarget.style.textDecoration = "none";
             }}
           >
-            <span>Why did EnergyView make that choice?</span>
+            <span>See why EnergyView made that choice</span>
             <span style={{ fontSize: 18 }}>{expandableExplanation && isExpanded ? "▾" : "▸"}</span>
           </button>
 

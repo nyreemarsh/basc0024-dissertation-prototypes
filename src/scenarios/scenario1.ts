@@ -80,4 +80,6 @@ export const scenario1: Scenario = {
     costDeltaPence: 147,
     co2DeltaKg: 1.4,
   },
+
+  nowOverride: '08:00',
 };

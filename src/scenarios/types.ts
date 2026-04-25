@@ -176,4 +176,10 @@ export interface Scenario {
 
   // Optional — only Scenario 3
   userOverride?: UserOverride;
+
+  /** Pins the "current hour" for chart rendering, overriding the system clock.
+   *  Format: 'HH:MM' (24-hour). When present, NOW indicators, past/future bar
+   *  styling, and strip coloring all use this fixed time instead of new Date().
+   *  Ensures every session sees the same visual state regardless of run time. */
+  nowOverride?: string;
 }

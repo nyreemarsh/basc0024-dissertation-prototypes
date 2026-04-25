@@ -87,4 +87,6 @@ export const scenario2: Scenario = {
     co2DeltaKg: 1.6,
     note: 'Charging at 08:00 costs virtually the same (−8p) but produces 1.6 kg more CO₂ due to elevated grid carbon intensity at that time. The AI prioritised carbon reduction over the marginal cost difference.',
   },
+
+  nowOverride: '09:00',
 };

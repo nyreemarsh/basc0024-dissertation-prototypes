@@ -6,7 +6,7 @@ import { TemporalNav } from "./components/shared/TemporalNav";
 import { colors, fonts } from "./tokens";
 import { useScenario } from "../context/ScenarioContext";
 import type { CausalFactors, FactorWeight, Scenario, TariffBand } from "../scenarios/types";
-import { computeHourlyGridFlow } from "../scenarios/derivations";
+import { computeHourlyGridFlow, resolveNow } from "../scenarios/derivations";
 
 /**
  * Prototype B — Comprehensible (DR8)
@@ -141,15 +141,11 @@ export function PrototypeB() {
     costTodayPence, savingsPence, savingsBreakdown, co2AvoidedKg,
   } = scenario;
 
-  // Time-aware charging state (mirrors PrototypeA)
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinutes = now.getMinutes();
+  // Resolve current time — pinned to scenario.nowOverride when set
+  const { currentHour, currentMinutes, todayISO } = resolveNow(scenario);
 
   const chargeStart = toHour(chargeWindowStart);
   const chargeEnd = toHour(chargeWindowEnd);
-
-  const todayISO = now.toISOString().split("T")[0];
 
   const [selectedDayInfo, setSelectedDayInfo] = useState<{
     date: string;
@@ -286,7 +282,7 @@ export function PrototypeB() {
         expandableExplanation={explanationContent}
       />
 
-      <TemporalNav variant="solid" showCausalContext={true} onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} userOverride={scenario.userOverride} />
+      <TemporalNav variant="solid" showCausalContext={true} onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} userOverride={scenario.userOverride} nowOverride={scenario.nowOverride} scenarioDate={scenario.date} />
     </Shell>
   );
 }

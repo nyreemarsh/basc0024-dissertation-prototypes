@@ -4,7 +4,7 @@ import { Header } from "./components/shared/Header";
 import { SummaryCard } from "./components/shared/SummaryCard";
 import { TemporalNav } from "./components/shared/TemporalNav";
 import { useScenario } from "../context/ScenarioContext";
-import { computeHourlyGridFlow } from "../scenarios/derivations";
+import { computeHourlyGridFlow, resolveNow } from "../scenarios/derivations";
 
 /** Parses the hour component from a 'HH:MM' string. */
 function toHour(hhmm: string): number {
@@ -35,16 +35,12 @@ export function PrototypeA() {
   const scenario = useScenario();
   const hourlyGridFlow = computeHourlyGridFlow(scenario);
 
-  // Time-aware charging state (same logic as CHARGED pill)
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinutes = now.getMinutes();
+  // Resolve current time — pinned to scenario.nowOverride when set
+  const { currentHour, currentMinutes, todayISO } = resolveNow(scenario);
 
   // Derive charge window bounds from scenario data
   const chargeStart = toHour(scenario.chargeWindowStart);
   const chargeEnd = toHour(scenario.chargeWindowEnd);
-
-  const todayISO = now.toISOString().split("T")[0];
 
   // Track selected day from TemporalNav
   const [selectedDayInfo, setSelectedDayInfo] = useState<{
@@ -138,7 +134,7 @@ export function PrototypeA() {
         showModifyButton={showModifyButton}
       />
 
-      <TemporalNav variant="solid" onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} userOverride={scenario.userOverride} />
+      <TemporalNav variant="solid" onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} userOverride={scenario.userOverride} nowOverride={scenario.nowOverride} scenarioDate={scenario.date} />
     </Shell>
   );
 }

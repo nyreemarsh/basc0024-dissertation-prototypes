@@ -107,4 +107,6 @@ export const scenario3: Scenario = {
       'Grid prices spiked to 34p/kWh from 15:00, well above the original forecast of 19p/kWh. EnergyView rescheduled appliance operation to 18:30 when prices are forecast to return to 20p/kWh, saving £1.70.',
     costWithoutOverridePence: 445,
   },
+
+  nowOverride: '14:00',
 };

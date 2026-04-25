@@ -6,7 +6,7 @@ import { TemporalNav } from "./components/shared/TemporalNav";
 import { colors, fonts } from "./tokens";
 import { useScenario } from "../context/ScenarioContext";
 import type { CausalFactors, FactorWeight, Scenario, TariffBand } from "../scenarios/types";
-import { computeHourlyGridFlow } from "../scenarios/derivations";
+import { computeHourlyGridFlow, resolveNow } from "../scenarios/derivations";
 
 /**
  * Prototype D — Truly Explainable (DR10)
@@ -201,15 +201,11 @@ export function PrototypeD() {
   // Renamed from 'activeScenario' to avoid shadowing the study scenario from context
   const [activeWhatIf, setActiveWhatIf] = useState<"lowerSolar" | "peakRate" | "fullBattery" | null>(null);
 
-  // Time-aware charging state (mirrors PrototypeA/B/C)
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinutes = now.getMinutes();
+  // Resolve current time — pinned to scenario.nowOverride when set
+  const { currentHour, currentMinutes, todayISO } = resolveNow(scenario);
 
   const chargeStart = toHour(chargeWindowStart);
   const chargeEnd = toHour(chargeWindowEnd);
-
-  const todayISO = now.toISOString().split("T")[0];
 
   const [selectedDayInfo, setSelectedDayInfo] = useState<{
     date: string;
@@ -425,7 +421,7 @@ export function PrototypeD() {
       : null;
 
     return {
-      title: "Why did EnergyView make that choice?",
+      title: "Why EnergyView made that choice",
       chartTitle: "Battery level comparison",
       yAxisLabel: "%",
       summary,
@@ -763,7 +759,7 @@ export function PrototypeD() {
         onExplainClick={() => setIsModalOpen(true)}
       />
 
-      <TemporalNav variant="hatched" showCausalContext={true} onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} userOverride={scenario.userOverride} />
+      <TemporalNav variant="hatched" showCausalContext={true} onDayChange={setSelectedDayInfo} weatherDescription={scenario.weather} hourlySOC={scenario.hourlySOC} tariffSchedule={scenario.tariffSchedule} hourlyCarbon={scenario.hourlyCarbon} hourlySolar={scenario.hourlySolar} hourlyConsumption={scenario.hourlyConsumption} hourlyGridFlow={hourlyGridFlow} userOverride={scenario.userOverride} nowOverride={scenario.nowOverride} scenarioDate={scenario.date} />
 
       {/* Modal overlay */}
       {isModalOpen && (
