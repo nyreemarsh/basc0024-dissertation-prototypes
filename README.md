@@ -7,8 +7,11 @@ A set of four interactive interface prototypes exploring how design can make aut
 > **Designing for AI Legibility: A Research through Design Study of Explainability Interface Prototypes for Autonomous Domestic Energy Systems**
 >
 > Author: Nyree Marsh
+> 
 > Supervisor: Prof. Enrico Costanza
+> 
 > Department: UCL Interaction Centre (UCLIC) / BASc Arts and Sciences
+> 
 > Submission: May 2026
 
 The dissertation investigates the question:
@@ -126,7 +129,7 @@ The three scenarios are deliberately ordered by reasoning complexity, from a rou
 
 ## Authorship and AI assistance
 
-All design decisions, prototype concepts, scenario construction, dissertation writing, and final code were authored by the candidate. Code scaffolding (TypeScript types, repetitive component structure, build configuration) was assisted by Anthropic's Claude under the candidate's direction and review. This use is consistent with UCL's policy on the use of generative AI in coursework: AI was used as an assistive tool, not an authorial substitute, and all outputs were reviewed and edited by the candidate.
+All design decisions, prototype concepts, scenario construction, dissertation writing, and final code were authored by the candidate. Code scaffolding (TypeScript types, repetitive component structure, build configuration) was assisted by Generative AI under the candidate's direction and review. This use is consistent with UCL's policy on the use of generative AI in coursework: AI was used as an assistive tool, not an authorial substitute, and all outputs were reviewed and edited by the candidate.
 
 ## Licence
 
