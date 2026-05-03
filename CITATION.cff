@@ -1,0 +1,55 @@
+cff-version: 1.2.0
+message: >-
+  If you use or reference this software, please cite both the software (as
+  below) and the accompanying dissertation under "preferred-citation".
+title: >-
+  EnergyView Evaluation: Prototype Study App for AI-Mediated
+  Domestic Energy Interfaces
+type: software
+authors:
+  - given-names: Nyree
+    family-names: Marsh
+    affiliation: University College London
+    # orcid: "https://orcid.org/0000-0000-0000-0000"   # add once registered
+abstract: >-
+  Four interactive React prototypes operationalising Doran et al.'s (2017)
+  explainability taxonomy as a controlled cumulative spectrum (interpretable
+  baseline → comprehensible → uncertainty-integrated → truly explainable).
+  Built as the research artefact for an undergraduate dissertation at
+  University College London (BASC0024, May 2026), used in a scenario-based
+  evaluation with non-technical participants to investigate how interface
+  design can make autonomous AI energy decisions legible to everyday users.
+keywords:
+  - explainable AI
+  - human-computer interaction
+  - sustainable HCI
+  - domestic energy
+  - research through design
+  - smart home
+  - explainability
+  - prototype evaluation
+license: MIT
+repository-code: "https://github.com/nyreemarsh/basc0024-dissertation-prototypes"
+url: "https://basc0024-dissertation-prototypes.vercel.app"
+version: v1.0-dissertation
+date-released: 2026-05-01   # update to the actual release date when you tag
+# identifiers:
+#   - type: doi
+#     value: 10.5281/zenodo.XXXXXXXX        # add once Zenodo mints the DOI
+#     description: Zenodo archive of this release
+
+preferred-citation:
+  type: thesis
+  authors:
+    - given-names: Nyree
+      family-names: Marsh
+      affiliation: University College London
+  title: >-
+    Designing for AI Legibility: A Research through Design Study of
+    Explainability Interface Prototypes for Autonomous Domestic Energy Systems
+  year: 2026
+  month: 5
+  institution:
+    name: University College London
+  thesis-type: "Undergraduate dissertation"
+  # url: "https://discovery.ucl.ac.uk/..."   # add UCL Discovery URL when available
