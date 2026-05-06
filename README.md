@@ -142,8 +142,6 @@ If you reference this work, please cite the accompanying dissertation:
 
 > Marsh, N. (2026). *Designing for AI Legibility: A Research through Design Study of Explainability Interface Prototypes for Autonomous Domestic Energy Systems* [Undergraduate dissertation, University College London].
 
-A persistent DOI for this codebase is archived on Zenodo: **[DOI to be added on first release]**.
-
 ---
 
 For questions or issues, please open a GitHub issue.
